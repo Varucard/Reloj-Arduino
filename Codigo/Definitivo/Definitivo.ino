@@ -21,7 +21,7 @@ dht DHT;                         //Objeto Sensor DHT11
 virtuabotixRTC myRTC(6, 7, 8);  //Objeto Modulo Reloj
 
 //Constantes
-char daysOfTheWeek[7][12] = {"Domingo","Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"};
+char daysOfTheWeek[7][12] = {"Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"};
 #define DHT11_PIN 5           //DHT 11 Pin donde se encuentra conectado el Sensor
 const long interval = 6000;   //Leer los datos de DHT11 cada 6 Segundos
 const int btLook = 4;         //Pines de los Botones
@@ -56,8 +56,7 @@ boolean turnItOn = false;
 int shakeTimes = 0;
 boolean testigo = false;
 
-void setup() 
-{
+void setup() {
   
   //(segundos(00), minutos(00), hora(00), díasemana(0), díadelmes(00), mes(00), año(00))
   //myRTC.setDS1302Time(00, 05, 22, 2, 8, 03, 2022); //Descomentar solo la primera vez que se use para setear Hora y Fecha
@@ -73,108 +72,122 @@ void setup()
   AH=EEPROM.read(0);            //Leer la hora de la alarma de EEPROM     
   AM=EEPROM.read(1);
   
-  if (AH > 23)                    //Verificacion de que la hora de la alarma sea valida
-  {
+  //Verificacion de que la hora de la alarma sea valida
+  if (AH > 23) {
     AH =0 ;
   }
-  if (AM > 59)
-  {
+
+  if (AM > 59) {
     AM = 0;
   }
   
   lcd.begin(16,2);              //Inicializar pantalla de 16 caracateres y 2 lineas
   lcd.backlight();              //Inicializar Retroiluminacion pantalla
   lcd.clear();                  //Limpiar la pantalla
+
 }
 
-void loop() 
-{
+void loop() {
+
   currentMillis = millis();
   readBtns();
   getTempHum(); 
   getTimeDate();
   
-  if (!setupScreen)
-  {
+  if (!setupScreen) {
+
     lcdPrint();
-    if (alarmON)
-    {
+
+    if (alarmON) {
       callAlarm();
     }
-  }
-  else
-  {
+
+  } else {
     lcdSetup();
   }
+
 }
 
 //Funciones
 
-void readBtns() //Leer Botonera
-{
+//Leer Botonera
+void readBtns() {
+
   set_state = digitalRead(btSet);       //BTN1
   up_state = digitalRead(btUp);         //BTN2
   down_state = digitalRead(btDown);     //BTN3
   alarm_state = digitalRead(btAlarm);   //BTN4
   look = digitalRead(btLook);           //BTN5
 
-        if (alarm_state == LOW) //Activa o Desactiva la Alarma
-      {
-        if (alarmON)
-        {
-          alarm = "OFF";
-          alarmON = false;
-        }
-        else
-        {
-          alarm = "ON";
-          alarmON = true;
-        }
-        delay(500);
-      }
+  //Activa o Desactiva la Alarma
+  if (alarm_state == LOW) {
 
-    if (look == LOW) //Pintar Display 16x2 (4)
-  {
+    if (alarmON) {
+
+      alarm = "OFF";
+      alarmON = false;
+
+    } else {
+
+      alarm = "ON";
+      alarmON = true;
+
+    }
+
+    delay(500);
+
+  }
+
+  //Pintar Display 16x2 (4)
+  if (look == LOW) {
+
     lcd.clear();
     lcdPrintAlarm();
     delay(1000);
     lcd.clear();
+
   }
   
-  if (down_state == LOW && btnCount == 0) //Apagar o prender la Retroilumnacion de la pantalla
-  {
-    if (backlightON)
-    {
+  //Apagar o prender la Retroilumnacion de la pantalla
+  if (down_state == LOW && btnCount == 0) {
+
+    if (backlightON) {
+
       lcd.noBacklight();
       backlightON = false;
-    }
-    else
-    {
+
+    } else {
+
       lcd.backlight();
       backlightON = true;
+
     }
     delay(500);
+
   }
 
-  if (set_state == LOW) //Pintar Display 16x2 (3)
-  {
-    if(btnCount < 7)
-    {
+  //Pintar Display 16x2 (3)
+  if (set_state == LOW) {
+
+    if(btnCount < 7) {
+
       btnCount++;
       setupScreen = true;
-        if(btnCount==1)
-        {
+
+        if (btnCount == 1) {
+
           lcd.clear();
-          lcd.setCursor(0,0);
+          lcd.setCursor(0, 0);
           lcd.print("------SET------");
-          lcd.setCursor(0,1);
+          lcd.setCursor(0, 1);
           lcd.print("-TIME and DATE-");
           delay(2000);
           lcd.clear();
+
         }
-    }
-    else //Actualizar Fecha y Hora
-    {
+
+    } else { /*Actualizar Fecha y Hora*/
+
       lcd.clear();
       //rtc.adjust(DateTime(YY, MM, DD, H, M, 0)); //Codigo viejo (Otro modulo Reloj)
       myRTC.setDS1302Time(S, M, H, 0, DD, MM, YY);
@@ -184,27 +197,35 @@ void readBtns() //Leer Botonera
       delay(2000);
       lcd.clear();
       setupScreen = false;
-      btnCount=0;
+      btnCount = 0;
+
     }
+
     delay(500);  
+
   }
+
 }
 
-void getTempHum() //Obtener Temperatura y Humedad
-{
-  if (currentMillis - previousMillis >= interval)
-  {
+//Obtener Temperatura y Humedad
+void getTempHum() {
+
+  if (currentMillis - previousMillis >= interval) {
+
     int chk = DHT.read11(DHT11_PIN);
     previousMillis = currentMillis;    
     hum = DHT.humidity;
     temp = DHT.temperature;
+
   }
+
 }
 
-void getTimeDate() //Obtener Fecha y Hora del modulo
-{
-  if (!setupScreen)
-  {
+//Obtener Fecha y Hora del modulo
+void getTimeDate() {
+
+  if (!setupScreen) {
+
     myRTC.updateTime();
     DD = myRTC.dayofmonth;
     MM = myRTC.month;
@@ -235,10 +256,12 @@ void getTimeDate() //Obtener Fecha y Hora del modulo
 
   if (AH < 10){ aH = '0' + String(AH); } else { aH = AH; }    //Hora y Minuto de la Alarma
   if (AM < 10){ aM = '0' + String(AM); }  else { aM = AM; }
+
 }
 
-void lcdPrint() //Pintar Display 16x2
-{
+//Pintar Display 16x2
+void lcdPrint() {
+
   lcd.setCursor(0,0); //Primera Fila
   lcd.print(sH);
   lcd.print(":");
@@ -257,168 +280,184 @@ void lcdPrint() //Pintar Display 16x2
   lcd.print("Hum:");
   lcd.print(hum);
   lcd.print("%");
+
 }
 
-void lcdPrintAlarm() //Pintar Display 16x2 (2)
-{
+//Pintar Display 16x2 (2)
+void lcdPrintAlarm() {
+
   String line1 = sH+":"+sM+":"+sS+"| "+aH+":"+aM;
   String line2 = sDD+"/"+sMM+"/"+sYY +"| "+alarm;
   lcd.setCursor(0,0); //Primera Fila
   lcd.print(line1);
   lcd.setCursor(0,1); //Segunda Fila
   lcd.print(line2);  
+
 }
 
-void lcdSetup() //Pintar Setup - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora
-{
-  if (btnCount <= 5) 
-  {
-  if (btnCount == 1) //Setear Hora
-  {
+//Pintar Setup - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora
+void lcdSetup() {
+
+  if (btnCount <= 5) {
+
+  //Setear Hora
+  if (btnCount == 1) {
+
     lcd.setCursor(4,0);
     lcd.print(">"); 
-    if (up_state == LOW) //Up boton +
-    {
-      if (H < 23)
-      {
+
+  //Up boton +
+    if (up_state == LOW) {
+
+      if (H < 23) {
         H++;
-      }
-      else
-      {
+      } else {
         H = 0;
       }
+
       delay(350);
+
     }
-    if (down_state == LOW) //Down boton -
-    {
-      if (H > 0){
+
+    //Down boton -
+    if (down_state == LOW) {
+
+      if (H > 0) {
         H--;
-      }
-      else {
+      } else {
         H = 23;
       }
+
       delay(350);
+
     }
-  }
-  else if (btnCount == 2) //Setear Minutos
-  {
+
+  } else if (btnCount == 2) { /*Setear Minutos*/
+
     lcd.setCursor(4,0);
     lcd.print(" ");
     lcd.setCursor(9,0);
     lcd.print(">");
-    if (up_state == LOW)
-    {
-      if (M < 59)
-      {
+
+    if (up_state == LOW) {
+
+      if (M < 59) {
         M++;
-      }
-      else {
+      } else {
         M = 0;
       }
+
       delay(350);
+
     }
-    if (down_state == LOW)
-    {
-      if (M > 0)
-      {
+
+    if (down_state == LOW) {
+
+      if (M > 0) {
         M--;
-      }
-      else
-      {
+      } else {
         M = 59;
       }
+
       delay(350);
+
     }
-  }
-  else if (btnCount == 3) //Setear Dia
-  {
+
+  } else if (btnCount == 3) { /*Setear Dia*/
+
     lcd.setCursor(9,0);
     lcd.print(" ");
     lcd.setCursor(0,1);
     lcd.print(">");
-    if (up_state == LOW)
-    {
-      if (DD < 31){
+
+    if (up_state == LOW) {
+
+      if (DD < 31) {
         DD++;
-      }
-      else {
+      } else {
         DD = 1;
       }
+
       delay(350);
+
     }
-    if (down_state == LOW)
-    {
-      if (DD > 1){
+
+    if (down_state == LOW) {
+
+      if (DD > 1) {
         DD--;
-      }
-      else
-      {
+      } else {
         DD = 31;
       }
+
       delay(350);
+
     }
-  }
-  else if (btnCount == 4) //Setear Mes
-  {
+
+  } else if (btnCount == 4) { /*Setear Mes*/
+
     lcd.setCursor(0,1);
     lcd.print(" ");
     lcd.setCursor(5,1);
     lcd.print(">");
-    if (up_state == LOW)
-    {
-      if (MM < 12)
-      {
+
+    if (up_state == LOW) {
+
+      if (MM < 12) {
         MM++;
-      }
-      else
-      {
+      } else {
         MM = 1;
       }
+
       delay(350);
+
     }
-    if (down_state == LOW)
-    {
-      if (MM > 1)
-      {
+
+    if (down_state == LOW) {
+
+      if (MM > 1) {
         MM--;
-      }
-      else {
+      } else {
         MM = 12;
       }
+
       delay(350);
+
     }
-  }
-  else if (btnCount == 5) //Setear Anio
-  {
+
+  } else if (btnCount == 5) { /*Setear Anio*/
+
     lcd.setCursor(5,1);
     lcd.print(" ");
     lcd.setCursor(10,1);
     lcd.print(">");
-    if (up_state == LOW)
-    {
-      if (YY < 2999)
-      {
+
+    if (up_state == LOW) {
+
+      if (YY < 2999) {
         YY++;
-      }
-      else
-      {
+      } else {
         YY = 2000;
       }
+
       delay(350);
+
     }
-    if (down_state == LOW)
-    {
-      if (YY > 2000)
-      {
+
+    if (down_state == LOW) {
+
+      if (YY > 2000) {
         YY--;
-      }
-      else
-      {
+      } else {
         YY = 2999;
       }
+
       delay(350);
+
     }
+
   }
+
   lcd.setCursor(5,0);
   lcd.print(sH);
   lcd.setCursor(8,0);
@@ -435,115 +474,129 @@ void lcdSetup() //Pintar Setup - Toda la logica en el Mecanismo de Actualizacion
   lcd.print("/");
   lcd.setCursor(11,1);
   lcd.print(sYY);
-  }
-  else
-  {
+
+  } else {
     setAlarmTime();
   }
+
 }
 
+//Pintar Setup Alarm - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora de alarma
+void setAlarmTime() {
 
-void setAlarmTime() //Pintar Setup Alarm - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora de alarma
-{
   //int up_state = adjust_state;    //Codigo viejo
   //int down_state = alarm_state;
   String line2;
   
   lcd.setCursor(0,0);
   lcd.print("SET  ALARM TIME");
-  if (btnCount == 6) //Setear la Hora de la Alarma
-  {
-    if (up_state == LOW)
-    {
-      if (AH < 23)
-      {
+
+  //Setear la Hora de la Alarma
+  if (btnCount == 6) {
+
+    if (up_state == LOW) {
+
+      if (AH < 23) {
         AH++;
-      }
-      else
-      {
+      } else {
         AH = 0;
       }
+
       delay(350);
+
     }
-    if (down_state == LOW)
-    {
-      if (AH > 0)
-      {
+
+    if (down_state == LOW) {
+
+      if (AH > 0) {
         AH--;
-      }
-      else
-      {
+      } else {
         AH = 23;
       }
+
       delay(350);
+
     }
+
     line2 = "    >"+aH+" : "+aM+"    ";
-  }
-  else if (btnCount == 7) //Setear los Minutos de la alarma
-  {
-    if (up_state == LOW)
-    {
-      if (AM < 59)
-      {
+
+  } else if (btnCount == 7) { /*Setear los Minutos de la alarma*/
+
+    if (up_state == LOW) {
+
+      if (AM < 59) {
         AM++;
-      }
-      else
-      {
+      } else {
         AM = 0;
       }
+
       delay(350);
+
     }
-    if (down_state == LOW)
-    {
-      if (AM > 0)
-      {
+
+    if (down_state == LOW) {
+
+      if (AM > 0) {
         AM--;
-      }
-      else 
-      {
+      } else {
         AM = 59;
       }
+
       delay(350);
+
     }
-    line2 = "     "+aH+" :>"+aM+"    ";    
+
+    line2 = "     "+aH+" :>"+aM+"    ";
+
   }
+
   lcd.setCursor(0,1);
   lcd.print(line2);
+
 }
 
-void callAlarm() //Funcion que llama al funcionamiento de la alarma
-{
-  if (aM == sM && aH == sH && S >= 0 && S <=2 )
-  {
+//Funcion que llama al funcionamiento de la alarma
+void callAlarm() {
+
+  if (aM == sM && aH == sH && S >= 0 && S <=2 ) {
     turnItOn = true;
   }
-  if(alarm_state == LOW || shakeTimes >= 6 || (M == (AM + 5)))
-  {
+
+  if (alarm_state == LOW || shakeTimes >= 6 || (M == (AM + 5))) {
+
     turnItOn = false;
     alarmON = true;
     delay(500);
+
   } 
-  if(analogRead(shakeSensor)>200)
-  {
+
+  if (analogRead(shakeSensor)>200) {
+
     shakeTimes++;
     Serial.print(shakeTimes);
     delay(50);
+
   }
-  if (turnItOn)
-  {
+
+  if (turnItOn) {
+
     unsigned long currentMillis = 10000; // millis(); Codigo viejo
-    if(currentMillis - previousMillis > interval)
-    {
+
+    if (currentMillis - previousMillis > interval) {
+
       previousMillis = currentMillis;   
       tone(buzzer, melody[i], 100);
       i++;
       
-      if(i > 3){ i = 0; };
+      if (i > 3){ i = 0; };
+
     }
-  }
-  else
-  {
+
+  } else {
+
     noTone(buzzer);
     shakeTimes = 0;
+
   }
+  
 }
