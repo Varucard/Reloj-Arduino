@@ -20,15 +20,15 @@ dht DHT;                         //Objeto Sensor DHT11
 virtuabotixRTC myRTC(6, 7, 8);  //Objeto Modulo Reloj
 
 //Constantes
-char daysOfTheWeek[7][12] = {"Domingo","Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"};
-#define DHT11_PIN 5           //DHT 11  (AM2302) - what pin we're connected to
+char daysOfTheWeek[7][12] = {"Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"};
+#define DHT11_PIN 5           //DHT 11  (AM2302) - El PIN al que estamos conectados
 const long interval = 6000;  //Leer los datos de DHT11 cada 6 Segundos
 const int btSet = 9;
 const int btUp = 10;
 const int btDown = 11;
 
 //Variables
-int DD,MM,YY,H,M,S,temp,hum, set_state, up_state, down_state;
+int DD, MM, YY, H, M, S, temp, hum, set_state, up_state, down_state;
 int btnCount = 0;
 unsigned long previousMillis = 0;
 unsigned long currentMillis; 
@@ -41,8 +41,8 @@ String sS;
 boolean backlightON = true;
 boolean setupScreen = false;
 
-void setup() 
-{
+void setup() {
+
   pinMode(btSet, INPUT_PULLUP); //Inicializar Botonera
   pinMode(btUp, INPUT_PULLUP);
   pinMode(btDown, INPUT_PULLUP);
@@ -50,57 +50,65 @@ void setup()
   lcd.begin(16,2);   //Inicializar pantalla de 16 caracateres y 2 lineas
   lcd.backlight();   //Inicializar Retroiluminacion pantalla
   lcd.clear();       //Limpiar la pantalla
+
 }
 
-void loop() 
-{
+void loop() {
+
   currentMillis = millis();
+
   readBtns();
   getTempHum();    
   getTimeDate();
-  if (!setupScreen)
-  {
+
+  if (!setupScreen) {
     lcdPrint();
-  }
-  else
-  {
+  } else {
     lcdSetup();
   }
+
 }
 
-//Funciones
+/**---------- Funciones ----------**/
 
-void readBtns() //Leer Botonera
-{
+/**
+* Capta la actividad en la botonera
+*/
+void readBtns() {
+
   set_state = digitalRead(btSet);
   up_state = digitalRead(btUp);
   down_state = digitalRead(btDown);
   
   //Apagar o prender la Retroilumnacion de la pantalla
-  if (down_state==LOW && btnCount==0)
-  {
-    if (backlightON)
-    {
+  if (down_state == LOW && btnCount == 0) {
+
+    if (backlightON) {
+
       lcd.noBacklight();
       backlightON = false;
-    }
-    else
-    {
+
+    } else {
+
       lcd.backlight();
       backlightON = true;
+
     }
+
     delay(500);
+
   }
 
   //Pintar Display 16x2 (3)
-  if (set_state==LOW)
-  {
-    if(btnCount<5)
-    {
+  if (set_state == LOW) {
+
+    if(btnCount < 5) {
+
       btnCount++;
       setupScreen = true;
-        if(btnCount==1)
-        {
+
+        if (btnCount == 1) {
+
           lcd.clear();
           lcd.setCursor(0,0);
           lcd.print("------SET------");
@@ -108,10 +116,11 @@ void readBtns() //Leer Botonera
           lcd.print("-TIME and DATE-");
           delay(2000);
           lcd.clear();
+
         }
-    }
-    else //Actualizar Fecha y Hora
-    {
+
+    } else {  /*Actualizar Fecha y Hora */
+
       lcd.clear();
       //rtc.adjust(DateTime(YY, MM, DD, H, M, 0)); //Codigo viejo (Otro modulo Reloj)
       myRTC.setDS1302Time(S, M, H, 0, DD, MM, YY);
@@ -119,27 +128,39 @@ void readBtns() //Leer Botonera
       delay(2000);
       lcd.clear();
       setupScreen = false;
-      btnCount=0;
+      btnCount = 0;
+
     }
+
     delay(500);
+
   }
+
 }
 
-void getTempHum() //Obtener Temperatura y Humedad
-{
-  if (currentMillis - previousMillis >= interval)
-  {
+/**
+* Obtiene la Temperatura y la Humedad
+*/
+void getTempHum() {
+
+  if (currentMillis - previousMillis >= interval) {
+
     int chk = DHT.read11(DHT11_PIN);
     previousMillis = currentMillis;    
     hum = DHT.humidity;
     temp= DHT.temperature;
+
   }
+
 }
 
-void getTimeDate() //Obtener Fecha y Hora del modulo
-{
-  if (!setupScreen)
-  {
+/**
+* Obtiene la Fecha y Hora del modulo
+*/
+void getTimeDate() {
+
+  if (!setupScreen) {
+
     myRTC.updateTime();
     DD = myRTC.dayofmonth;
     MM = myRTC.month;
@@ -161,16 +182,18 @@ void getTimeDate() //Obtener Fecha y Hora del modulo
   }
   
   //No tengo idea bien de que hace este codigo
-  if (DD<10){ sDD = '0' + String(DD); } else { sDD = DD; }
-  if (MM<10){ sMM = '0' + String(MM); } else { sMM = MM; }
-  sYY=YY;
-  if (H<10){ sH = '0' + String(H); } else { sH = H; }
-  if (M<10){ sM = '0' + String(M); } else { sM = M; }
-  if (S<10){ sS = '0' + String(S); } else { sS = S; }
+  if (DD < 10){ sDD = '0' + String(DD); } else { sDD = DD; }
+  if (MM < 10){ sMM = '0' + String(MM); } else { sMM = MM; }
+  sYY = YY;
+  if (H < 10){ sH = '0' + String(H); } else { sH = H; }
+  if (M < 10){ sM = '0' + String(M); } else { sM = M; }
+  if (S < 10){ sS = '0' + String(S); } else { sS = S; }
+
 }
 
-void lcdPrint() //Pintar Display 16x2
-{
+//Pintar Display 16x2
+void lcdPrint() {
+
   lcd.setCursor(0,0); //Primera Fila
   lcd.print(sH);
   lcd.print(":");
@@ -189,128 +212,166 @@ void lcdPrint() //Pintar Display 16x2
   lcd.print("Hum:");
   lcd.print(hum);
   lcd.print("%");
+
 }
 
-void lcdSetup() //Pintar Setup - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora
-{
-  if (btnCount==1){
+//Pintar Setup - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora
+void lcdSetup() {
+
+  if (btnCount == 1) {
+
     lcd.setCursor(4,0);
     lcd.print(">"); 
-    if (up_state == LOW){
-      if (H<23){
+    if (up_state == LOW) {
+
+      if (H < 23) {
         H++;
+      } else {
+        H = 0;
       }
-      else {
-        H=0;
-      }
+
       delay(500);
     }
-    if (down_state == LOW){
-      if (H>0){
+
+    if (down_state == LOW) {
+
+      if (H > 0){
         H--;
+      } else {
+        H = 23;
       }
-      else {
-        H=23;
-      }
+
       delay(500);
+
     }
-  }
-  else if (btnCount==2){
+
+  } else if (btnCount == 2) {
+
     lcd.setCursor(4,0);
     lcd.print(" ");
     lcd.setCursor(9,0);
     lcd.print(">");
-    if (up_state == LOW){
-      if (M<59){
+
+    if (up_state == LOW) {
+
+      if (M < 59) {
         M++;
+      } else {
+        M = 0;
       }
-      else {
-        M=0;
-      }
+
       delay(500);
+
     }
-    if (down_state == LOW){
-      if (M>0){
+
+    if (down_state == LOW) {
+
+      if (M > 0) {
         M--;
+      } else {
+        M = 59;
       }
-      else {
-        M=59;
-      }
+
       delay(500);
+
     }
-  }
-  else if (btnCount==3){
+
+  } else if (btnCount == 3) {
+
     lcd.setCursor(9,0);
     lcd.print(" ");
     lcd.setCursor(0,1);
     lcd.print(">");
-    if (up_state == LOW){
-      if (DD<31){
+
+    if (up_state == LOW) {
+
+      if (DD < 31) {
         DD++;
+      } else {
+        DD = 1;
       }
-      else {
-        DD=1;
-      }
+
       delay(500);
+
     }
-    if (down_state == LOW){
-      if (DD>1){
+
+    if (down_state == LOW) {
+
+      if (DD > 1) {
         DD--;
+      } else {
+        DD = 31;
       }
-      else {
-        DD=31;
-      }
+
       delay(500);
+
     }
-  }
-  else if (btnCount==4){
+
+  } else if (btnCount == 4) {
+
     lcd.setCursor(0,1);
     lcd.print(" ");
     lcd.setCursor(5,1);
     lcd.print(">");
-    if (up_state == LOW){
-      if (MM<12){
+
+    if (up_state == LOW) {
+
+      if (MM < 12) {
         MM++;
+      } else {
+        MM = 1;
       }
-      else {
-        MM=1;
-      }
+
       delay(500);
+
     }
-    if (down_state == LOW){
-      if (MM>1){
+
+    if (down_state == LOW) {
+
+      if (MM > 1) {
         MM--;
+      } else {
+        MM = 12;
       }
-      else {
-        MM=12;
-      }
+
       delay(500);
+
     }
-  }
-  else if (btnCount==5){
+
+  } else if (btnCount == 5) {
+
     lcd.setCursor(5,1);
     lcd.print(" ");
     lcd.setCursor(10,1);
     lcd.print(">");
-    if (up_state == LOW){
-      if (YY<2999){
+
+    if (up_state == LOW) {
+
+      if (YY < 2999) {
         YY++;
       }
       else {
-        YY=2000;
+        YY = 2000;
       }
+
       delay(500);
+
     }
-    if (down_state == LOW){
-      if (YY>2000){
+
+    if (down_state == LOW) {
+
+      if (YY > 2000) {
         YY--;
+      } else {
+        YY = 2999;
       }
-      else {
-        YY=2999;
-      }
+
       delay(500);
+
     }
+
   }
+
   lcd.setCursor(5,0);
   lcd.print(sH);
   lcd.setCursor(8,0);
@@ -327,4 +388,5 @@ void lcdSetup() //Pintar Setup - Toda la logica en el Mecanismo de Actualizacion
   lcd.print("/");
   lcd.setCursor(11,1);
   lcd.print(sYY);
+
 }
