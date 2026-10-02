@@ -1,602 +1,384 @@
-/*  Clock - Thermometer with Arduino
- *   
- *  Display 16x2:       Display 16x2 (2):   Display 16x2 (3)    Setup:                Display 16x2 (4)  Setup Alarm
- *  +----------------+  +----------------+  +----------------+  +----------------+  +----------------+  +----------------+  
- *  |HH:MM DD/MM/YYYY|  |HH:MM:SS|* HH:MM|  |------SET-------|  |    >HH :>MM    |  |------SET-------|  |   Set Alarm    |  
- *  |Temp:27c Hum:74%|  |DD/MM/YY|  ALARM|  |-TIME and DATE--|  |>DD />MM />YYYY |  |-- TIME ALARM --|  |   >HH :>MM     |
- *  +----------------+  +----------------+  +----------------+  +----------------+  +----------------+  +----------------+ 
+/*
+ * Reloj Arduino
+ * Reloj con termómetro, higrómetro y alarma que se apaga por movimiento.
+ *
+ * Pantalla principal   Info alarma (LOOK)   Entrada a ajustes    Ajuste fecha/hora    Ajuste alarma
+ * +----------------+   +----------------+   +----------------+   +----------------+   +----------------+
+ * |HH:MM DD/MM/YYYY|   |HH:MM:SS| HH:MM |   |------SET------ |   |    >HH :>MM    |   |SET  ALARM TIME |
+ * |Temp:27c Hum:74%|   |DD/MM/YYYY| ON  |   |-TIME and DATE- |   |>DD />MM />YYYY |   |    >HH :>MM    |
+ * +----------------+   +----------------+   +----------------+   +----------------+   +----------------+
+ *
+ * Botones (a GND, con pull-up interno):
+ *   SET   -> recorre los pasos de ajuste: hora, minutos, día, mes, año,
+ *            hora de alarma, minutos de alarma; la última pulsación guarda.
+ *   UP    -> incrementa el valor en ajuste.
+ *   DOWN  -> decrementa el valor en ajuste / prende-apaga la luz de fondo.
+ *   ALARM -> arma o desarma la alarma; si está sonando, la silencia.
+ *   LOOK  -> muestra un segundo la pantalla de información de la alarma.
  */
 
-//Librerias
-#include <dht.h>                  //Libreria para trabajar con el sensor DHT11
-#include <Wire.h>                 //Libreria de comunicacion por I2C
-#include <LCD.h>                  //Libreria para funciones de LCD
-#include <LiquidCrystal_I2C.h>    //Libreria para LCD por I2C
-#include <virtuabotixRTC.h>       //Libreria para Modulo Reloj
-#include <EEPROM.h>               //Libreria para Manejo de EEPROM de Arduino
+#include <Wire.h>
+#include <LCD.h>                // New LiquidCrystal (fmalpartida)
+#include <LiquidCrystal_I2C.h>  // New LiquidCrystal (fmalpartida)
+#include <dht.h>                // DHTlib (Rob Tillaart)
+#include <virtuabotixRTC.h>     // Módulo RTC DS1302
+#include <EEPROM.h>
 
-//Objetos de las Librerias
-LiquidCrystal_I2C lcd (0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); // DIR, E, RW, RS, D4, D5, D6, D7 - Objeto modulo pantalla
-dht DHT;                         //Objeto Sensor DHT11
-virtuabotixRTC myRTC(6, 7, 8);  //Objeto Modulo Reloj
+// --- Pines ---
+const uint8_t PIN_BTN_LOOK  = 4;
+const uint8_t PIN_DHT11     = 5;
+const uint8_t PIN_RTC_SCLK  = 6;
+const uint8_t PIN_RTC_IO    = 7;
+const uint8_t PIN_RTC_CE    = 8;
+const uint8_t PIN_BTN_SET   = 9;
+const uint8_t PIN_BTN_UP    = 10;
+const uint8_t PIN_BTN_DOWN  = 11;
+const uint8_t PIN_BTN_ALARM = 12;
+const uint8_t PIN_BUZZER    = 13;
+const uint8_t PIN_SHAKE     = A3;  // Sensor de inclinación SW-520D
 
-//Constantes
-char daysOfTheWeek[7][12] = {"Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado"};
-#define DHT11_PIN 5           //DHT 11 Pin donde se encuentra conectado el Sensor
-const long interval = 6000;   //Leer los datos de DHT11 cada 6 Segundos
-const int btLook = 4;         //Pines de los Botones
-const int btSet = 9;
-const int btUp = 10;
-const int btDown = 11;
-const int btAlarm = 12;
-const int buzzer = 13;        //Buzzer
-const int shakeSensor = A3;   //Sensor de Movimiento
-long intercal = 300;
-int melody[] = {600, 800, 1000, 1200}; //Melodia del Buzzer
+// --- Configuración ---
+const uint8_t       LCD_I2C_ADDR          = 0x27;
+const unsigned long DHT_READ_INTERVAL_MS  = 6000;             // El DHT11 necesita >= 1 s entre lecturas
+const unsigned long MELODY_STEP_MS        = 300;              // Tiempo entre notas de la alarma
+const unsigned long ALARM_MAX_RING_MS     = 5UL * 60 * 1000;  // La alarma se apaga sola a los 5 minutos
+const int           SHAKE_THRESHOLD       = 200;              // Lectura analógica que cuenta como movimiento
+const uint8_t       SHAKES_TO_STOP        = 6;                // Movimientos necesarios para apagar la alarma
+const int           MIN_YEAR              = 2000;             // El DS1302 solo guarda años 2000-2099
+const int           MAX_YEAR              = 2099;
+const int           MELODY[]              = {600, 800, 1000, 1200};
+const uint8_t       MELODY_LEN            = sizeof(MELODY) / sizeof(MELODY[0]);
 
-//Variables
-int DD,MM,YY,H,M,S,temp,hum, set_state, up_state, down_state, alarm_state, adjust_state, AH, AM, shake_state, look;
-int btnCount = 0;
-unsigned long previousMillis = 0;
-unsigned long currentMillis; 
-int i = 0;
-String sDD;
-String sMM;
-String sYY;
-String sH;
-String sM;
-String sS;
-String aH = "12";
-String aM = "00";
-String alarm = "OFF";
-boolean backlightON = true;
-boolean setupScreen = false;
-boolean alarmON = false;
-boolean turnItOn = false;
-int shakeTimes = 0;
-boolean testigo = false;
+// Direcciones de EEPROM donde se guarda la hora de la alarma
+const int EEPROM_ALARM_HOUR   = 0;
+const int EEPROM_ALARM_MINUTE = 1;
+
+// Pasos del modo ajuste (0 = funcionamiento normal)
+enum SetupStep {
+  STEP_NONE = 0,
+  STEP_HOUR,
+  STEP_MINUTE,
+  STEP_DAY,
+  STEP_MONTH,
+  STEP_YEAR,
+  STEP_ALARM_HOUR,
+  STEP_ALARM_MINUTE
+};
+
+// LCD por I2C: dirección, En, Rw, Rs, D4, D5, D6, D7, luz de fondo, polaridad
+LiquidCrystal_I2C lcd(LCD_I2C_ADDR, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+dht DHT;
+virtuabotixRTC rtcModule(PIN_RTC_SCLK, PIN_RTC_IO, PIN_RTC_CE);  // La librería ya define un global "rtc"
+
+// --- Estado ---
+int day, month, year, hour, minute, second;
+int temperature = 0, humidity = 0;
+int alarmHour, alarmMinute;
+
+uint8_t setupStep = STEP_NONE;
+bool timeEdited   = false;  // Solo se escribe el RTC si el usuario cambió fecha u hora
+
+bool backlightOn   = true;
+bool alarmArmed    = false;
+bool alarmRinging  = false;
+bool alarmFired    = false;  // Evita que la alarma vuelva a sonar dentro del mismo minuto
+unsigned long alarmStartMs  = 0;
+unsigned long lastNoteMs    = 0;
+uint8_t       melodyIndex   = 0;
+uint8_t       shakeCount    = 0;
+bool          lastShakeHigh = false;
+
+unsigned long lastDhtReadMs = 0;
+
+// Lectura de los botones en la vuelta actual del loop (LOW = presionado)
+bool btnSet, btnUp, btnDown, btnAlarm, btnLook;
 
 void setup() {
-  
-  //(segundos(00), minutos(00), hora(00), díasemana(0), díadelmes(00), mes(00), año(00))
-  //myRTC.setDS1302Time(00, 05, 22, 2, 8, 03, 2022); //Descomentar solo la primera vez que se use para setear Hora y Fecha
-  
-  pinMode(btSet, INPUT_PULLUP); //Inicializar Botonera
-  pinMode(btUp, INPUT_PULLUP);
-  pinMode(btDown, INPUT_PULLUP);
-  pinMode(btLook, INPUT_PULLUP); 
-  pinMode(btAlarm, INPUT_PULLUP);
-  
-  pinMode(buzzer, OUTPUT);      //Inicializar el Buzzer
+  // Para poner en hora un RTC nuevo se puede usar el menú SET, o descomentar
+  // esta línea una sola vez: (segundos, minutos, hora, díaSemana 1-7, día, mes, año)
+  // rtcModule.setDS1302Time(0, 5, 22, 3, 8, 3, 2022);
 
-  AH=EEPROM.read(0);            //Leer la hora de la alarma de EEPROM     
-  AM=EEPROM.read(1);
-  
-  //Verificacion de que la hora de la alarma sea valida
-  if (AH > 23) {
-    AH =0 ;
-  }
+  pinMode(PIN_BTN_SET, INPUT_PULLUP);
+  pinMode(PIN_BTN_UP, INPUT_PULLUP);
+  pinMode(PIN_BTN_DOWN, INPUT_PULLUP);
+  pinMode(PIN_BTN_LOOK, INPUT_PULLUP);
+  pinMode(PIN_BTN_ALARM, INPUT_PULLUP);
+  pinMode(PIN_BUZZER, OUTPUT);
 
-  if (AM > 59) {
-    AM = 0;
-  }
-  
-  lcd.begin(16,2);              //Inicializar pantalla de 16 caracateres y 2 lineas
-  lcd.backlight();              //Inicializar Retroiluminacion pantalla
-  lcd.clear();                  //Limpiar la pantalla
+  // Una EEPROM sin usar devuelve 255, por eso se valida
+  alarmHour   = EEPROM.read(EEPROM_ALARM_HOUR);
+  alarmMinute = EEPROM.read(EEPROM_ALARM_MINUTE);
+  if (alarmHour > 23)   alarmHour = 0;
+  if (alarmMinute > 59) alarmMinute = 0;
 
+  lcd.begin(16, 2);
+  lcd.backlight();
+  lcd.clear();
+
+  readTempHum();
 }
 
 void loop() {
+  readButtons();
 
-  currentMillis = millis();
-  readBtns();
-  getTempHum(); 
-  getTimeDate();
-  
-  if (!setupScreen) {
-
-    lcdPrint();
-
-    if (alarmON) {
-      callAlarm();
-    }
-
-  } else {
-    lcdSetup();
+  if (millis() - lastDhtReadMs >= DHT_READ_INTERVAL_MS) {
+    readTempHum();
   }
 
+  if (setupStep == STEP_NONE) {
+    readRtc();
+    printMainScreen();
+    updateAlarm();
+  } else {
+    handleSetup();
+  }
 }
 
-//Funciones
+// ---------------------------------------------------------------------------
+// Botones
+// ---------------------------------------------------------------------------
 
-//Leer Botonera
-void readBtns() {
+void readButtons() {
+  btnSet   = digitalRead(PIN_BTN_SET) == LOW;
+  btnUp    = digitalRead(PIN_BTN_UP) == LOW;
+  btnDown  = digitalRead(PIN_BTN_DOWN) == LOW;
+  btnAlarm = digitalRead(PIN_BTN_ALARM) == LOW;
+  btnLook  = digitalRead(PIN_BTN_LOOK) == LOW;
 
-  set_state = digitalRead(btSet);       //BTN1
-  up_state = digitalRead(btUp);         //BTN2
-  down_state = digitalRead(btDown);     //BTN3
-  alarm_state = digitalRead(btAlarm);   //BTN4
-  look = digitalRead(btLook);           //BTN5
-
-  //Activa o Desactiva la Alarma
-  if (alarm_state == LOW) {
-
-    if (alarmON) {
-
-      alarm = "OFF";
-      alarmON = false;
-
+  if (btnAlarm) {
+    if (alarmRinging) {
+      stopRinging();  // Silencia sin desarmar: mañana vuelve a sonar
     } else {
-
-      alarm = "ON";
-      alarmON = true;
-
+      alarmArmed = !alarmArmed;
     }
-
     delay(500);
-
   }
 
-  //Pintar Display 16x2 (4)
-  if (look == LOW) {
-
+  if (btnLook) {
     lcd.clear();
-    lcdPrintAlarm();
+    printAlarmInfoScreen();
     delay(1000);
     lcd.clear();
-
   }
-  
-  //Apagar o prender la Retroilumnacion de la pantalla
-  if (down_state == LOW && btnCount == 0) {
 
-    if (backlightON) {
+  if (btnDown && setupStep == STEP_NONE) {
+    backlightOn = !backlightOn;
+    if (backlightOn) lcd.backlight(); else lcd.noBacklight();
+    delay(500);
+  }
 
-      lcd.noBacklight();
-      backlightON = false;
-
+  if (btnSet) {
+    if (setupStep < STEP_ALARM_MINUTE) {
+      if (setupStep == STEP_NONE) {
+        stopRinging();
+        timeEdited = false;
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("------SET------");
+        lcd.setCursor(0, 1);
+        lcd.print("-TIME and DATE-");
+        delay(2000);
+        lcd.clear();
+      }
+      setupStep++;
     } else {
-
-      lcd.backlight();
-      backlightON = true;
-
+      saveSettings();
+      setupStep = STEP_NONE;
     }
     delay(500);
-
   }
-
-  //Pintar Display 16x2 (3)
-  if (set_state == LOW) {
-
-    if(btnCount < 7) {
-
-      btnCount++;
-      setupScreen = true;
-
-        if (btnCount == 1) {
-
-          lcd.clear();
-          lcd.setCursor(0, 0);
-          lcd.print("------SET------");
-          lcd.setCursor(0, 1);
-          lcd.print("-TIME and DATE-");
-          delay(2000);
-          lcd.clear();
-
-        }
-
-    } else { /*Actualizar Fecha y Hora*/
-
-      lcd.clear();
-      //rtc.adjust(DateTime(YY, MM, DD, H, M, 0)); //Codigo viejo (Otro modulo Reloj)
-      myRTC.setDS1302Time(S, M, H, 0, DD, MM, YY);
-      EEPROM.write(0, AH);  //Guardar la Hora de la Alarma en la EEPROM
-      EEPROM.write(1, AM);  //Guardar el Minuto de la Alarma en la EEPROM
-      lcd.print("Saving....");
-      delay(2000);
-      lcd.clear();
-      setupScreen = false;
-      btnCount = 0;
-
-    }
-
-    delay(500);  
-
-  }
-
 }
 
-//Obtener Temperatura y Humedad
-void getTempHum() {
+// ---------------------------------------------------------------------------
+// Sensores
+// ---------------------------------------------------------------------------
 
-  if (currentMillis - previousMillis >= interval) {
-
-    int chk = DHT.read11(DHT11_PIN);
-    previousMillis = currentMillis;    
-    hum = DHT.humidity;
-    temp = DHT.temperature;
-
+void readTempHum() {
+  lastDhtReadMs = millis();
+  // Si la lectura falla se conservan los últimos valores válidos
+  if (DHT.read11(PIN_DHT11) == DHTLIB_OK) {
+    humidity    = DHT.humidity;
+    temperature = DHT.temperature;
   }
-
 }
 
-//Obtener Fecha y Hora del modulo
-void getTimeDate() {
-
-  if (!setupScreen) {
-
-    myRTC.updateTime();
-    DD = myRTC.dayofmonth;
-    MM = myRTC.month;
-    YY = myRTC.year;
-    H = myRTC.hours;
-    M = myRTC.minutes;
-    S = myRTC.seconds;
-    
-    /* Codigo viejo (Otro modulo Reloj)
-      DateTime now = rtc.now();
-      DD = now.day();
-      MM = now.month();
-      YY = now.year();
-      H = now.hour();
-      M = now.minute();
-      S = now.second();
-    */
-    
-  }
-  
-  //No tengo idea bien de que hace este codigo
-  if (DD < 10){ sDD = '0' + String(DD); } else { sDD = DD; }  //Hora y Fecha
-  if (MM < 10){ sMM = '0' + String(MM); } else { sMM = MM; }
-  sYY = YY;
-  if (H < 10){ sH = '0' + String(H); } else { sH = H; }
-  if (M < 10){ sM = '0' + String(M); } else { sM = M; }
-  if (S < 10){ sS = '0' + String(S); } else { sS = S; }
-
-  if (AH < 10){ aH = '0' + String(AH); } else { aH = AH; }    //Hora y Minuto de la Alarma
-  if (AM < 10){ aM = '0' + String(AM); }  else { aM = AM; }
-
+void readRtc() {
+  rtcModule.updateTime();
+  day    = rtcModule.dayofmonth;
+  month  = rtcModule.month;
+  year   = rtcModule.year;
+  hour   = rtcModule.hours;
+  minute = rtcModule.minutes;
+  second = rtcModule.seconds;
 }
 
-//Pintar Display 16x2
-void lcdPrint() {
+// ---------------------------------------------------------------------------
+// Pantallas
+// ---------------------------------------------------------------------------
 
-  lcd.setCursor(0,0); //Primera Fila
-  lcd.print(sH);
-  lcd.print(":");
-  lcd.print(sM);
-  lcd.print(" ");
-  lcd.print(sDD);
-  lcd.print("/");
-  lcd.print(sMM);
-  lcd.print("/");
-  lcd.print(sYY);
-  lcd.setCursor(0,1); //Segunda Fila
-  lcd.print("Temp:");
-  lcd.print(temp);
-  lcd.print("c");
-  lcd.setCursor(9,1); //10 celdas de segunda fila
-  lcd.print("Hum:");
-  lcd.print(hum);
-  lcd.print("%");
-
+void printLine(uint8_t row, const char *text) {
+  lcd.setCursor(0, row);
+  lcd.print(text);
 }
 
-//Pintar Display 16x2 (2)
-void lcdPrintAlarm() {
-
-  String line1 = sH+":"+sM+":"+sS+"| "+aH+":"+aM;
-  String line2 = sDD+"/"+sMM+"/"+sYY +"| "+alarm;
-  lcd.setCursor(0,0); //Primera Fila
-  lcd.print(line1);
-  lcd.setCursor(0,1); //Segunda Fila
-  lcd.print(line2);  
-
+void printMainScreen() {
+  char line[17];
+  snprintf(line, sizeof(line), "%02d:%02d %02d/%02d/%04d", hour, minute, day, month, year);
+  printLine(0, line);
+  snprintf(line, sizeof(line), "Temp:%2dc Hum:%2d%%", temperature, humidity);
+  printLine(1, line);
 }
 
-//Pintar Setup - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora
-void lcdSetup() {
+void printAlarmInfoScreen() {
+  char line[17];
+  snprintf(line, sizeof(line), "%02d:%02d:%02d| %02d:%02d", hour, minute, second, alarmHour, alarmMinute);
+  printLine(0, line);
+  snprintf(line, sizeof(line), "%02d/%02d/%04d| %-3s", day, month, year, alarmArmed ? "ON" : "OFF");
+  printLine(1, line);
+}
 
-  if (btnCount <= 5) {
+// Línea "    >HH :>MM    " con el cursor '>' delante del campo que se está editando
+void printHourMinuteLine(uint8_t row, int h, int m, bool markHour, bool markMinute) {
+  char line[17];
+  snprintf(line, sizeof(line), "    %c%02d :%c%02d    ",
+           markHour ? '>' : ' ', h, markMinute ? '>' : ' ', m);
+  printLine(row, line);
+}
 
-  //Setear Hora
-  if (btnCount == 1) {
-
-    lcd.setCursor(4,0);
-    lcd.print(">"); 
-
-  //Up boton +
-    if (up_state == LOW) {
-
-      if (H < 23) {
-        H++;
-      } else {
-        H = 0;
-      }
-
-      delay(350);
-
-    }
-
-    //Down boton -
-    if (down_state == LOW) {
-
-      if (H > 0) {
-        H--;
-      } else {
-        H = 23;
-      }
-
-      delay(350);
-
-    }
-
-  } else if (btnCount == 2) { /*Setear Minutos*/
-
-    lcd.setCursor(4,0);
-    lcd.print(" ");
-    lcd.setCursor(9,0);
-    lcd.print(">");
-
-    if (up_state == LOW) {
-
-      if (M < 59) {
-        M++;
-      } else {
-        M = 0;
-      }
-
-      delay(350);
-
-    }
-
-    if (down_state == LOW) {
-
-      if (M > 0) {
-        M--;
-      } else {
-        M = 59;
-      }
-
-      delay(350);
-
-    }
-
-  } else if (btnCount == 3) { /*Setear Dia*/
-
-    lcd.setCursor(9,0);
-    lcd.print(" ");
-    lcd.setCursor(0,1);
-    lcd.print(">");
-
-    if (up_state == LOW) {
-
-      if (DD < 31) {
-        DD++;
-      } else {
-        DD = 1;
-      }
-
-      delay(350);
-
-    }
-
-    if (down_state == LOW) {
-
-      if (DD > 1) {
-        DD--;
-      } else {
-        DD = 31;
-      }
-
-      delay(350);
-
-    }
-
-  } else if (btnCount == 4) { /*Setear Mes*/
-
-    lcd.setCursor(0,1);
-    lcd.print(" ");
-    lcd.setCursor(5,1);
-    lcd.print(">");
-
-    if (up_state == LOW) {
-
-      if (MM < 12) {
-        MM++;
-      } else {
-        MM = 1;
-      }
-
-      delay(350);
-
-    }
-
-    if (down_state == LOW) {
-
-      if (MM > 1) {
-        MM--;
-      } else {
-        MM = 12;
-      }
-
-      delay(350);
-
-    }
-
-  } else if (btnCount == 5) { /*Setear Anio*/
-
-    lcd.setCursor(5,1);
-    lcd.print(" ");
-    lcd.setCursor(10,1);
-    lcd.print(">");
-
-    if (up_state == LOW) {
-
-      if (YY < 2999) {
-        YY++;
-      } else {
-        YY = 2000;
-      }
-
-      delay(350);
-
-    }
-
-    if (down_state == LOW) {
-
-      if (YY > 2000) {
-        YY--;
-      } else {
-        YY = 2999;
-      }
-
-      delay(350);
-
-    }
-
-  }
-
-  lcd.setCursor(5,0);
-  lcd.print(sH);
-  lcd.setCursor(8,0);
-  lcd.print(":");
-  lcd.setCursor(10,0);
-  lcd.print(sM);
-  lcd.setCursor(1,1);
-  lcd.print(sDD);
-  lcd.setCursor(4,1);
-  lcd.print("/");
-  lcd.setCursor(6,1);
-  lcd.print(sMM);
-  lcd.setCursor(9,1);
-  lcd.print("/");
-  lcd.setCursor(11,1);
-  lcd.print(sYY);
-
+void printSetupScreen() {
+  if (setupStep <= STEP_YEAR) {
+    char line[17];
+    printHourMinuteLine(0, hour, minute, setupStep == STEP_HOUR, setupStep == STEP_MINUTE);
+    snprintf(line, sizeof(line), "%c%02d /%c%02d /%c%04d ",
+             setupStep == STEP_DAY ? '>' : ' ', day,
+             setupStep == STEP_MONTH ? '>' : ' ', month,
+             setupStep == STEP_YEAR ? '>' : ' ', year);
+    printLine(1, line);
   } else {
-    setAlarmTime();
+    printLine(0, "SET  ALARM TIME ");
+    printHourMinuteLine(1, alarmHour, alarmMinute,
+                        setupStep == STEP_ALARM_HOUR, setupStep == STEP_ALARM_MINUTE);
   }
-
 }
 
-//Pintar Setup Alarm - Toda la logica en el Mecanismo de Actualizacion Fecha y Hora de alarma
-void setAlarmTime() {
+// ---------------------------------------------------------------------------
+// Modo ajuste
+// ---------------------------------------------------------------------------
 
-  //int up_state = adjust_state;    //Codigo viejo
-  //int down_state = alarm_state;
-  String line2;
-  
-  lcd.setCursor(0,0);
-  lcd.print("SET  ALARM TIME");
-
-  //Setear la Hora de la Alarma
-  if (btnCount == 6) {
-
-    if (up_state == LOW) {
-
-      if (AH < 23) {
-        AH++;
-      } else {
-        AH = 0;
-      }
-
-      delay(350);
-
-    }
-
-    if (down_state == LOW) {
-
-      if (AH > 0) {
-        AH--;
-      } else {
-        AH = 23;
-      }
-
-      delay(350);
-
-    }
-
-    line2 = "    >"+aH+" : "+aM+"    ";
-
-  } else if (btnCount == 7) { /*Setear los Minutos de la alarma*/
-
-    if (up_state == LOW) {
-
-      if (AM < 59) {
-        AM++;
-      } else {
-        AM = 0;
-      }
-
-      delay(350);
-
-    }
-
-    if (down_state == LOW) {
-
-      if (AM > 0) {
-        AM--;
-      } else {
-        AM = 59;
-      }
-
-      delay(350);
-
-    }
-
-    line2 = "     "+aH+" :>"+aM+"    ";
-
-  }
-
-  lcd.setCursor(0,1);
-  lcd.print(line2);
-
+// Suma delta a value dando la vuelta dentro de [minValue, maxValue]
+int wrap(int value, int delta, int minValue, int maxValue) {
+  value += delta;
+  if (value > maxValue) return minValue;
+  if (value < minValue) return maxValue;
+  return value;
 }
 
-//Funcion que llama al funcionamiento de la alarma
-void callAlarm() {
+bool isLeapYear(int y) {
+  return (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+}
 
-  if (aM == sM && aH == sH && S >= 0 && S <=2 ) {
-    turnItOn = true;
-  }
+int daysInMonth(int m, int y) {
+  static const uint8_t DAYS[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  return (m == 2 && isLeapYear(y)) ? 29 : DAYS[m - 1];
+}
 
-  if (alarm_state == LOW || shakeTimes >= 6 || (M == (AM + 5))) {
+// Día de la semana 1-7 (1 = domingo), algoritmo de Sakamoto
+int dayOfWeek(int d, int m, int y) {
+  static const uint8_t T[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
+  if (m < 3) y--;
+  return (y + y / 4 - y / 100 + y / 400 + T[m - 1] + d) % 7 + 1;
+}
 
-    turnItOn = false;
-    alarmON = true;
-    delay(500);
+void handleSetup() {
+  int delta = (btnUp ? 1 : 0) - (btnDown ? 1 : 0);
 
-  } 
-
-  if (analogRead(shakeSensor)>200) {
-
-    shakeTimes++;
-    Serial.print(shakeTimes);
-    delay(50);
-
-  }
-
-  if (turnItOn) {
-
-    unsigned long currentMillis = 10000; // millis(); Codigo viejo
-
-    if (currentMillis - previousMillis > interval) {
-
-      previousMillis = currentMillis;   
-      tone(buzzer, melody[i], 100);
-      i++;
-      
-      if (i > 3){ i = 0; };
-
+  if (delta != 0) {
+    switch (setupStep) {
+      case STEP_HOUR:         hour        = wrap(hour, delta, 0, 23); break;
+      case STEP_MINUTE:       minute      = wrap(minute, delta, 0, 59); break;
+      case STEP_DAY:          day         = wrap(day, delta, 1, daysInMonth(month, year)); break;
+      case STEP_MONTH:        month       = wrap(month, delta, 1, 12); break;
+      case STEP_YEAR:         year        = wrap(year, delta, MIN_YEAR, MAX_YEAR); break;
+      case STEP_ALARM_HOUR:   alarmHour   = wrap(alarmHour, delta, 0, 23); break;
+      case STEP_ALARM_MINUTE: alarmMinute = wrap(alarmMinute, delta, 0, 59); break;
     }
-
-  } else {
-
-    noTone(buzzer);
-    shakeTimes = 0;
-
+    if (setupStep <= STEP_YEAR) {
+      timeEdited = true;
+      // Corrige días inválidos al cambiar mes o año (ej.: 31/04 -> 30/04)
+      day = min(day, daysInMonth(month, year));
+    }
+    delay(350);
   }
-  
+
+  printSetupScreen();
+}
+
+void saveSettings() {
+  lcd.clear();
+  lcd.print("Saving....");
+
+  // Si solo se ajustó la alarma no se toca el RTC: reescribirlo con la hora
+  // leída al entrar al menú haría que el reloj se atrase.
+  if (timeEdited) {
+    rtcModule.setDS1302Time(0, minute, hour, dayOfWeek(day, month, year), day, month, year);
+  }
+  EEPROM.update(EEPROM_ALARM_HOUR, alarmHour);
+  EEPROM.update(EEPROM_ALARM_MINUTE, alarmMinute);
+
+  delay(2000);
+  lcd.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Alarma
+// ---------------------------------------------------------------------------
+
+void startRinging() {
+  alarmRinging  = true;
+  alarmStartMs  = millis();
+  lastNoteMs    = 0;
+  melodyIndex   = 0;
+  shakeCount    = 0;
+  lastShakeHigh = false;
+}
+
+void stopRinging() {
+  alarmRinging = false;
+  noTone(PIN_BUZZER);
+}
+
+void updateAlarm() {
+  bool isAlarmMinute = hour == alarmHour && minute == alarmMinute;
+  if (!isAlarmMinute) {
+    alarmFired = false;
+  } else if (alarmArmed && !alarmFired) {
+    alarmFired = true;
+    startRinging();
+  }
+
+  if (!alarmArmed && alarmRinging) {
+    stopRinging();
+  }
+  if (!alarmRinging) {
+    return;
+  }
+
+  // Se cuenta cada vez que el sensor pasa de reposo a movimiento
+  bool shakeHigh = analogRead(PIN_SHAKE) > SHAKE_THRESHOLD;
+  if (shakeHigh && !lastShakeHigh) {
+    shakeCount++;
+  }
+  lastShakeHigh = shakeHigh;
+
+  unsigned long now = millis();
+  if (shakeCount >= SHAKES_TO_STOP || now - alarmStartMs >= ALARM_MAX_RING_MS) {
+    stopRinging();
+    return;
+  }
+
+  if (now - lastNoteMs >= MELODY_STEP_MS) {
+    lastNoteMs = now;
+    tone(PIN_BUZZER, MELODY[melodyIndex], 100);
+    melodyIndex = (melodyIndex + 1) % MELODY_LEN;
+  }
 }
