@@ -1,0 +1,25 @@
+name: Compilar firmware
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        fqbn:
+          - arduino:avr:uno
+          - arduino:avr:pro
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/compile-sketches@v1
+        with:
+          fqbn: ${{ matrix.fqbn }}
+          sketch-paths: |
+            - firmware/RelojArduino
+          libraries: |
+            - name: DHTlib
+            - source-url: https://github.com/fmalpartida/New-LiquidCrystal.git
+            - source-url: https://github.com/chrisfryer78/ArduinoRTClibrary.git

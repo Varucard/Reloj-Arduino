@@ -1,0 +1,16 @@
+# Compilación de Arduino / arduino-cli
+build/
+*.hex
+*.elf
+*.bin
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*~
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini

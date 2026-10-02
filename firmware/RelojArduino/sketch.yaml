@@ -1,0 +1,2 @@
+# Perfil para arduino-cli: permite compilar con `arduino-cli compile` sin pasar -b
+default_fqbn: arduino:avr:uno
