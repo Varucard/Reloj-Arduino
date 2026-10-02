@@ -7,11 +7,13 @@ Reloj despertador casero hecho con Arduino. Muestra la hora, la fecha, la temper
 ## Funcionalidades
 
 - Hora y fecha desde un módulo RTC DS1302, que mantiene la hora aunque se corte la alimentación.
-- Temperatura y humedad con un sensor DHT11, actualizadas cada 6 segundos.
-- Alarma con melodía en un buzzer, guardada en EEPROM, que se conserva al reiniciar.
-- La alarma se apaga con 6 sacudidas (sensor de inclinación SW-520D), con el botón ALARM o sola a los 5 minutos.
-- Ajuste de fecha, hora y alarma desde los botones, sin necesidad de reprogramar.
-- Luz de fondo de la pantalla que se puede prender y apagar.
+- Temperatura y humedad con un sensor DHT11, actualizadas cada 6 segundos (muestra `--` si el sensor falla).
+- Alarma con melodía, configurable para **todos los días, lunes a viernes o sábado y domingo**.
+- Hora, días y estado de la alarma guardados en EEPROM, así que se conservan aunque se corte la luz.
+- **Posponer (snooze)** 5 minutos con el botón ALARM; la alarma se apaga con 6 sacudidas (sensor SW-520D) o sola a los 5 minutos.
+- La luz de fondo se prende sola cuando suena la alarma.
+- Programa sin bloqueos: el reloj sigue andando mientras se usan los botones, y mantener UP o DOWN apretado avanza rápido.
+- Íconos propios en la pantalla (termómetro, gota y campana de alarma armada).
 
 ## Hardware
 
@@ -47,20 +49,31 @@ Los botones van entre el pin y GND; se usan las resistencias pull-up internas. L
 | Botón | Funcionamiento normal | En modo ajuste |
 |---|---|---|
 | **SET** | Entra al modo ajuste | Pasa al siguiente campo; en el último, guarda |
-| **UP** | — | Aumenta el valor |
-| **DOWN** | Prende o apaga la luz de fondo | Disminuye el valor |
-| **ALARM** | Arma o desarma la alarma; si está sonando, la silencia | — |
-| **LOOK** | Muestra un segundo la hora de la alarma y su estado | — |
+| **UP** | — | Aumenta el valor (mantener = avance rápido) |
+| **DOWN** | Prende o apaga la luz de fondo | Disminuye el valor (mantener = avance rápido) |
+| **ALARM** | Arma o desarma la alarma | Solo pospone o cancela si está sonando |
+| **LOOK** | Clic: muestra 3 s la pantalla de info · Mantener 1 s: ajuste directo de la alarma | — |
 
-El modo ajuste recorre, en orden: hora → minutos → día → mes → año → hora de alarma → minutos de alarma. El RTC solo se reescribe si se modificó la fecha o la hora (los segundos se ponen en 00); si solo se cambia la alarma, la hora del reloj no se toca.
+Mientras suena la alarma:
+
+| Acción | Resultado |
+|---|---|
+| Botón **ALARM** | Pospone 5 minutos (en pantalla aparece `z`) |
+| Botón **ALARM** con la alarma pospuesta | Cancela la alarma hasta el día siguiente |
+| **Sacudir** el reloj 6 veces | Apaga la alarma |
+| No hacer nada | Se apaga sola a los 5 minutos |
+
+El modo ajuste recorre, en orden: hora → minutos → día → mes → año → hora de alarma → minutos de alarma → días de alarma. Mientras estás en el ajuste, el reloj y la alarma siguen funcionando. Al guardar, el RTC solo se reescribe con lo que cambiaste: si cambiaste la hora, los segundos se ponen en 00; si solo cambiaste la fecha, se conserva la hora actual. Si no se toca ningún botón durante 30 segundos, el ajuste se cancela sin guardar.
 
 ```
-Pantalla principal   Info de alarma       Ajuste fecha/hora    Ajuste alarma
-+----------------+   +----------------+   +----------------+   +----------------+
-|HH:MM DD/MM/YYYY|   |HH:MM:SS| HH:MM |   |    >HH : MM    |   |SET  ALARM TIME |
-|Temp:27c Hum:74%|   |DD/MM/YYYY| ON  |   | DD / MM / YYYY |   |    >HH : MM    |
-+----------------+   +----------------+   +----------------+   +----------------+
+Pantalla principal   Info (LOOK)          Ajuste fecha/hora    Ajuste alarma        Días de alarma
++----------------+   +----------------+   +----------------+   +----------------+   +----------------+
+|HH:MM DD/MM/YYYY|   |Vie HH:MM:SS    |   |    >HH : MM    |   |AJUSTE ALARMA   |   |DIAS DE ALARMA  |
+|T 27°C  D 74%  A|   |A HH:MM ON  L-V |   | DD / MM / YYYY |   |    >HH : MM    |   |  >Lun a Vie    |
++----------------+   +----------------+   +----------------+   +----------------+   +----------------+
 ```
+
+En la pantalla, `T`, `D` y `A` son íconos (termómetro, gota y campana). La campana aparece solo si la alarma está armada.
 
 ## Compilación
 
